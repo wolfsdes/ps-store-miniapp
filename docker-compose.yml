@@ -1,0 +1,22 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: sqlite:///./store.db
+      DEFAULT_TRY_RUB: "2.28"
+      DEFAULT_MARKUP: "0.10"
+      BOT_USERNAME: your_bot_username
+    volumes:
+      - ./backend:/app
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:8000/api
+      VITE_BOT_USERNAME: your_bot_username
+    depends_on:
+      - backend

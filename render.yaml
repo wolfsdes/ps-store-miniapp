@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: ps-store-miniapp
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: DEFAULT_TRY_RUB
+        value: "2.28"
+      - key: DEFAULT_MARKUP
+        value: "0.10"
+      - key: BOT_USERNAME
+        value: your_bot_username
