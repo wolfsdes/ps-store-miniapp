@@ -166,3 +166,8 @@ Order #1234
 ## Публикация в Telegram
 
 См. `DEPLOY_TELEGRAM.md`.
+
+
+## PS4 / PS5 + PS Plus
+
+Добавлен модуль каталога PlayStation Store Turkey. См. `CATALOG_UPGRADE.md`.

@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft, Search, ShoppingBag, Home, LayoutGrid, UserRound,
   Plus, Minus, Trash2, ChevronRight, Sparkles, ShieldCheck,
-  Zap, Tag, X
+  Zap, Tag, X, Crown
 } from "lucide-react";
-import { createOrder, getGames, getSettings } from "./api";
+import { createOrder, getGames, getSubscriptions, getSettings } from "./api";
 
 const tg = window.Telegram?.WebApp;
 const demoUser = { id: "demo_telegram_user", first_name: "Гость", username: "" };
@@ -17,6 +17,7 @@ function App() {
   const [page, setPage] = useState("home");
   const [games, setGames] = useState([]);
   const [settings, setSettings] = useState({try_rub: 2.28, markup: 0.10});
+  const [subscriptions, setSubscriptions] = useState([]);
   const [cart, setCart] = useState(() => JSON.parse(localStorage.getItem("cart") || "[]"));
   const [selectedGame, setSelectedGame] = useState(null);
   const [search, setSearch] = useState("");
@@ -31,8 +32,8 @@ function App() {
   }, []);
 
   useEffect(() => {
-    Promise.all([getGames(), getSettings()])
-      .then(([g, s]) => { setGames(g); setSettings(s); })
+    Promise.all([getGames(), getSubscriptions(), getSettings()])
+      .then(([g, plus, s]) => { setGames(g); setSubscriptions(plus); setSettings(s); })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
@@ -50,17 +51,18 @@ function App() {
     return matchText && matchPlatform;
   });
 
-  function addToCart(game) {
+  function addToCart(item) {
+    const cartKey = `${item.type || "game"}-${item.id}`;
     setCart(prev => {
-      const found = prev.find(x => x.id === game.id);
-      if (found) return prev.map(x => x.id === game.id ? {...x, quantity: x.quantity + 1} : x);
-      return [...prev, {...game, quantity: 1}];
+      const found = prev.find(x => (x.cartKey || `${x.type || "game"}-${x.id}`) === cartKey);
+      if (found) return prev.map(x => (x.cartKey || `${x.type || "game"}-${x.id}`) === cartKey ? {...x, cartKey, quantity: x.quantity + 1} : x);
+      return [...prev, {...item, cartKey, quantity: 1}];
     });
   }
 
-  function updateQty(id, delta) {
+  function updateQty(cartKey, delta) {
     setCart(prev => prev
-      .map(x => x.id === id ? {...x, quantity: x.quantity + delta} : x)
+      .map(x => (x.cartKey || `${x.type || "game"}-${x.id}`) === cartKey ? {...x, cartKey, quantity: x.quantity + delta} : x)
       .filter(x => x.quantity > 0)
     );
   }
@@ -87,6 +89,7 @@ function App() {
           games={games}
           onOpen={openGame}
           onCatalog={() => nav("catalog")}
+          onPlus={() => nav("plus")}
           onCart={() => nav("cart")}
           cartCount={cartCount}
           user={tg?.initDataUnsafe?.user || demoUser}
@@ -102,6 +105,14 @@ function App() {
           onOpen={openGame}
           onAdd={addToCart}
           loading={loading}
+        />
+      )}
+      {page === "plus" && (
+        <PlusPage
+          subscriptions={subscriptions}
+          onAdd={addToCart}
+          onCart={() => nav("cart")}
+          cartCount={cartCount}
         />
       )}
       {page === "game" && selectedGame && (
@@ -145,14 +156,14 @@ function Header({title, back, onBack, cartCount, onCart}) {
     <header className="topbar">
       <div className="brand">
         {back ? <button className="icon-btn" onClick={onBack}><ArrowLeft size={20}/></button> : <div className="brand-mark">✦</div>}
-        <div><div className="brand-name">{title || "PlayStore"}</div><div className="brand-sub">Игры для PlayStation</div></div>
+        <div><div className="brand-name">{title || "24XSTORE"}</div><div className="brand-sub">Игры для PlayStation</div></div>
       </div>
       {!back && <button className="cart-head" onClick={onCart}><ShoppingBag size={19}/><span>{cartCount}</span></button>}
     </header>
   );
 }
 
-function HomePage({featured, games, onOpen, onCatalog, onCart, cartCount, user}) {
+function HomePage({featured, games, onOpen, onCatalog, onPlus, onCart, cartCount, user}) {
   const hero = featured[0] || games[0];
   return (
     <>
@@ -181,9 +192,9 @@ function HomePage({featured, games, onOpen, onCatalog, onCart, cartCount, user})
 
         <section className="quick-grid">
           <Quick icon={<Sparkles/>} title="Новинки" onClick={onCatalog}/>
-          <Quick icon={<Tag/>} title="Скидки" onClick={onCatalog}/>
           <Quick icon={<ShieldCheck/>} title="PS5" onClick={onCatalog}/>
           <Quick icon={<Zap/>} title="PS4" onClick={onCatalog}/>
+          <Quick icon={<Crown/>} title="PS Plus" onClick={onPlus}/>
         </section>
 
         <SectionTitle title="Популярное" action="Весь каталог" onClick={onCatalog}/>
@@ -215,7 +226,7 @@ function SectionTitle({title, action, onClick}) {
 
 function GameCard({game,onOpen}) {
   return <button className="game-card" onClick={() => onOpen(game)}>
-    <div className="cover"><img src={game.image} alt=""/><span className="platform-badge">{game.platform.split(" / ")[0]}</span></div>
+    <div className="cover"><img src={game.image} alt=""/><span className="platform-badge">{game.platform.split(" / ")[0]}</span>{game.discount_percent>0&&<span className="discount-badge">-{game.discount_percent}%</span>}</div>
     <div className="game-title">{game.title}</div>
     <div className="game-price">{money(game.price_rub)}</div>
   </button>;
@@ -256,11 +267,39 @@ function GamePage({game,onBack,onAdd}) {
       <div className="detail-content">
         <div className="detail-pills"><span className="pill blue">{game.platform}</span><span className="pill">Турция</span></div>
         <h1>{game.title}</h1>
-        <div className="rating">★ <b>4.8</b> <span>1 245 отзывов</span></div>
+        <div className="rating"><b>PlayStation Store Turkey</b></div>
         <div className="price-box"><div><span>Цена в магазине</span><strong>{money(game.price_rub)}</strong></div><em>+10%</em><p>Рассчитано по текущему курсу TRY/RUB</p></div>
         <h3>Описание</h3><p className="description">{game.description}</p>
         <button className="primary wide" onClick={onAdd}><ShoppingBag size={19}/> Добавить в корзину</button>
       </div>
+    </main>
+  </>;
+}
+
+function PlusPage({subscriptions,onAdd,onCart,cartCount}) {
+  const tiers=["Essential","Extra","Deluxe"];
+  return <>
+    <Header title="PS Plus" cartCount={cartCount} onCart={onCart}/>
+    <main className="content">
+      <section className="plus-hero">
+        <div className="plus-logo"><Crown/></div>
+        <div><span className="eyebrow">PLAYSTATION PLUS</span><h1>Больше игр.<br/><span>Больше возможностей.</span></h1><p>Подписки для турецкого региона. Цена автоматически пересчитывается в рубли.</p></div>
+      </section>
+      {tiers.map(tier=>{
+        const items=subscriptions.filter(x=>x.tier===tier);
+        if(!items.length)return null;
+        return <section className="plus-tier" key={tier}>
+          <SectionTitle title={tier} action={`${items.length} варианта`}/>
+          <div className="plus-list">
+            {items.map(item=><div className="plus-card" key={item.id}>
+              <div className={`tier-icon ${tier.toLowerCase()}`}><Crown/></div>
+              <div className="plus-info"><b>{item.title}</b><span>{item.duration_months} мес. · Турция</span><strong>{item.price_rub == null ? "Цена уточняется" : money(item.price_rub)}</strong></div>
+              <button className="add-btn" disabled={item.price_rub == null} onClick={()=>onAdd(item)}><ShoppingBag size={18}/></button>
+            </div>)}
+          </div>
+        </section>;
+      })}
+      <div className="trust-card"><div className="trust-icon"><ShieldCheck/></div><div><b>Три уровня PS Plus</b><p>Essential, Extra и Deluxe. Перед продажей проверяем актуальную цену турецкого региона.</p></div></div>
     </main>
   </>;
 }
@@ -270,10 +309,10 @@ function CartPage({cart,total,onQty,onBack,onCheckout,onOpen}) {
     <Header title="Корзина" back onBack={onBack}/>
     <main className="content">
       {cart.length===0 ? <EmptyCart/> : <>
-        <div className="cart-items">{cart.map(item=><div className="cart-item" key={item.id}>
-          <img src={item.image} alt="" onClick={()=>onOpen(item)}/>
-          <div className="cart-item-info"><b>{item.title}</b><span>{item.platform}</span><strong>{money(item.price_rub)}</strong><div className="qty"><button onClick={()=>onQty(item.id,-1)}><Minus size={14}/></button><b>{item.quantity}</b><button onClick={()=>onQty(item.id,1)}><Plus size={14}/></button></div></div>
-          <button className="delete" onClick={()=>onQty(item.id,-item.quantity)}><Trash2 size={16}/></button>
+        <div className="cart-items">{cart.map(item=><div className="cart-item" key={item.cartKey || `${item.type || "game"}-${item.id}`}>
+          <img src={item.image} alt="" onClick={()=>item.type!=="subscription"&&onOpen(item)}/>
+          <div className="cart-item-info"><b>{item.title}</b><span>{item.platform || `PS Plus ${item.tier}`}</span><strong>{money(item.price_rub)}</strong><div className="qty"><button onClick={()=>onQty(item.cartKey || `${item.type || "game"}-${item.id}`,-1)}><Minus size={14}/></button><b>{item.quantity}</b><button onClick={()=>onQty(item.cartKey || `${item.type || "game"}-${item.id}`,1)}><Plus size={14}/></button></div></div>
+          <button className="delete" onClick={()=>onQty(item.cartKey || `${item.type || "game"}-${item.id}`,-item.quantity)}><Trash2 size={16}/></button>
         </div>)}</div>
         <div className="summary"><div><span>Товаров</span><b>{cart.reduce((s,x)=>s+x.quantity,0)}</b></div><div className="total"><span>Итого</span><strong>{money(total)}</strong></div></div>
         <button className="primary wide" onClick={onCheckout}>Перейти к оплате <ChevronRight size={18}/></button>
@@ -293,7 +332,7 @@ function CheckoutPage({cart,total,onBack,onClear}) {
     setBusy(true);
     try {
       const user = tg?.initDataUnsafe?.user || demoUser;
-      const order = await createOrder({telegram_user_id:String(user.id), items:cart.map(x=>({game_id:x.id,quantity:x.quantity}))});
+      const order = await createOrder({telegram_user_id:String(user.id), items:cart.map(x=>({item_id:x.id,item_type:x.type||"game",quantity:x.quantity}))});
       setResult(order);
     } catch(e) {
       alert(e.message);
@@ -336,6 +375,7 @@ function BottomNav({page,setPage,cartCount}) {
   return <nav className="bottom-nav">
     <button className={page==="home"?"active":""} onClick={()=>setPage("home")}><Home/><span>Главная</span></button>
     <button className={page==="catalog"?"active":""} onClick={()=>setPage("catalog")}><LayoutGrid/><span>Каталог</span></button>
+    <button className={page==="plus"?"active":""} onClick={()=>setPage("plus")}><Crown/><span>PS Plus</span></button>
     <button className={page==="cart"?"active":""} onClick={()=>setPage("cart")}><span className="nav-icon"><ShoppingBag/>{cartCount>0&&<i>{cartCount}</i>}</span><span>Корзина</span></button>
     <button className={page==="profile"?"active":""} onClick={()=>setPage("profile")}><UserRound/><span>Профиль</span></button>
   </nav>;
