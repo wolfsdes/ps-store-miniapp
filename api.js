@@ -1,0 +1,5 @@
+const API = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+export async function getGames(params={}){const qs=new URLSearchParams();if(params.search)qs.set("search",params.search);if(params.platform&&params.platform!=="all")qs.set("platform",params.platform);if(params.discounted)qs.set("discounted","true");const r=await fetch(`${API}/games?${qs}`);if(!r.ok)throw new Error("Не удалось загрузить каталог");return r.json();}
+export async function getSubscriptions(){const r=await fetch(`${API}/subscriptions`);if(!r.ok)throw new Error("Не удалось загрузить PS Plus");return r.json();}
+export async function getSettings(){const r=await fetch(`${API}/settings`);if(!r.ok)throw new Error("Не удалось загрузить настройки");return r.json();}
+export async function createOrder(payload){const r=await fetch(`${API}/orders`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.detail||"Не удалось создать заказ");}return r.json();}
